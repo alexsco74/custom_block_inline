@@ -1,0 +1,7 @@
+name = Custom block inline
+description = Different block content for different uri
+package = Custom
+version = VERSION
+core = 7.x
+
+configure = admin/config/content/custom_block_inline

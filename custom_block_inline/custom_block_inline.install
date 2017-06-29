@@ -1,0 +1,61 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the custom_block_inline module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function custom_block_inline_schema() {
+  $schema['custom_block_inline'] = array(
+    'description' => 'Stores block content for uri.',
+    'fields' => array(
+      'cid' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique ID.',
+      ),
+      'delta' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '0',
+        'description' => 'Unique ID for block within a module.',
+      ),
+      'uri' => array(
+        'type' => 'varchar',
+        'length' => 2048,
+        'not null' => FALSE,
+        'sortable' => TRUE,
+      ),
+      'body' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'big',
+        'description' => 'Block contents.',
+        'translatable' => TRUE,
+      ),
+      'format' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'description' => 'The {filter_format}.format of the block body.',
+      ),
+    ),
+    'primary key' => array('cid'),
+    'indexes' => array(
+      'custom_block_inline_delta' => array('delta'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function custom_block_inline_install() {
+  db_delete('variable')->condition('name', 'custom_block_inline_%', 'LIKE')->execute();
+}

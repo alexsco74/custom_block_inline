@@ -1,0 +1,187 @@
+<?php
+
+/**
+ * @file
+ * Custom block inline
+ */
+
+function custom_block_inline_menu() {
+  $items['admin/config/content/custom_block_inline'] = array(
+    'title' => 'Custom block inline',
+    'description' => 'Custom block inline',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('custom_block_inline_admin_config_form'),
+    'access arguments' => array('administer site configuration'),
+    'file' => 'custom_block_inline.admin.inc',
+  );
+  return $items;
+}
+
+function custom_block_inline_block_info() {
+  $quantity_block = variable_get('custom_block_inline_quantity_blocks', 2);
+  if (!empty($quantity_block)) {
+    foreach (range(0, $quantity_block - 1) as $index) {
+      $blocks['number_' . $index] = array(
+        'info' => t('Custom block inline - ' . ($index + 1)),
+        'cache' => DRUPAL_NO_CACHE
+      );
+    }
+  }
+  return $blocks;
+}
+
+function custom_block_inline_block_configure($delta = '') {
+  $form = array();
+  if (strpos($delta, 'number_') === 0) {
+    $destination = drupal_get_destination();
+    if (!empty($destination['destination'])) {
+      $record = db_query('SELECT * FROM {custom_block_inline} WHERE delta = :d AND uri = :u', array(
+        ':d' => $delta,
+        ':u' => $destination['destination']
+      ))->fetchObject();
+    }
+    if (!empty($record->body)) {
+      $body = $record->body;
+    }
+    else {
+      $body = '';
+    }
+
+    if (!empty($record->format)) {
+      $format = $record->format;
+    }
+    else {
+      $format = '';
+    }
+    $form[$delta . '_body'] = array(
+      '#type' => 'text_format',
+      '#title' => t('Content'),
+      '#default_value' => $body,
+      '#format' => !empty($format) ? $format : 'full_html',
+    );
+
+    //template gor pages
+    $form[$delta . '_temp'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Template'),
+      '#collapsible' => TRUE,
+    );
+
+    $template_pattern = variable_get('custom_block_inline_template_pattern_' . $delta, 'catalog/*');
+    $form[$delta . '_temp'][$delta . '_template_pattern'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Pages pattern'),
+      '#default_value' => $template_pattern,
+    );
+
+    $template_text = variable_get('custom_block_inline_template_text_' . $delta, array());
+
+    if (module_exists('custom_seo')) {
+
+      $tokens = _custom_seo_template_variables();
+
+      $form[$delta . '_temp']['template_variables'] = array(
+        '#type' => 'item',
+        '#title' => t('Template variables'),
+        'markup' => array('#markup' => theme('table', array('rows' => $tokens))), //theme_table();
+      );
+    }
+
+    $form[$delta . '_temp'][$delta . '_template_text'] = array(
+      '#type' => 'text_format',
+      '#title' => t('Template for pages'),
+      '#default_value' => isset($template_text['value']) ? $template_text['value'] : '',
+      '#format' => isset($template_text['format']) ? $template_text['format'] : 'full_html',
+    );
+
+  }
+  return $form;
+}
+
+function custom_block_inline_block_save($delta = '', $edit = array()) {
+  if (strpos($delta, 'number_') === 0) {
+
+    //save template for pages
+    variable_set('custom_block_inline_template_pattern_' . $delta, $edit[$delta . '_template_pattern']);
+    variable_set('custom_block_inline_template_text_' . $delta, $edit[$delta . '_template_text']);
+
+    $destination = drupal_get_destination();
+    if (!empty($destination['destination'])) {
+      $fields = array(
+        'delta' => $delta,
+        'uri' => $destination['destination'],
+        'body' => $edit[$delta . '_body']['value'],
+        'format' => $edit[$delta . '_body']['format'],
+      );
+      $record = db_query('SELECT * FROM {custom_block_inline} WHERE delta = :d AND uri = :u', array(
+        ':d' => $delta,
+        ':u' => $destination['destination']
+      ))->fetchObject();
+
+      if (!empty($record->cid)) {
+        db_update('custom_block_inline')
+          ->fields($fields)
+          ->condition('cid', $record->cid)
+          ->execute();
+      }
+      else {
+        db_insert('custom_block_inline')->fields($fields)->execute();
+      }
+    }
+  }
+}
+
+function custom_block_inline_block_view($delta = '') {
+  global $language;
+  $block = array();
+  if (strpos($delta, 'number_') === 0) {
+    $edit_path = 'admin/structure/block/manage/custom_block_inline/' . $delta . '/configure';
+    $edit_opts = array(
+      'query' => array('destination' => current_path()),
+    );
+    $record = db_query('SELECT * FROM {custom_block_inline} WHERE delta = :d AND uri = :u', array(
+      ':d' => $delta,
+      ':u' => current_path(),
+    ))->fetchObject();
+    if (drupal_valid_path($edit_path)) {
+      $block['content'] = '<div>' . l($language->language == 'ru' ? t('Редактировать текст') : t('Edit block'), $edit_path, $edit_opts) . '</div>';
+    }
+    else {
+      $block['content'] = '';
+    }
+
+    if(!empty($record->body)) {
+      $record_body_filter = trim(str_replace("&nbsp;", '', filter_xss($record->body, array())));
+    }
+    if (!empty($record_body_filter)) {
+      $block['content'] .= $record->body;
+    }
+    else {
+      $pattern = variable_get('custom_block_inline_template_pattern_' . $delta);
+      $template = variable_get('custom_block_inline_template_text_' . $delta);
+      if (!empty($template['value'])) {
+        $valid = FALSE;
+        if (empty($pattern)) {
+          $valid = TRUE;
+        }
+        elseif (($pages_ex = explode('/', $pattern)) && count($pages_ex) > 1 && array_pop($pages_ex) == '*') {
+          if ((strpos(current_path(), str_replace('*', '', $pattern)) === 0)) {
+            $valid = TRUE;
+          }
+        }
+        if ($valid) {
+          $block['content'] .= $template['value'];
+        }
+      }
+    }
+
+  }
+  return $block;
+}
+
+function custom_block_inline_block_view_alter(&$data, &$block) {
+  if ($block->module == 'custom_block_inline') {
+    $block->title = '';
+  }
+}
+
